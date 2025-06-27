@@ -112,6 +112,35 @@ product_domain: danieloa-vpc.example.com
 
 ---
 
+## 12. Makefile: Common Developer Tasks
+
+A `Makefile` is provided to streamline common developer workflows:
+
+| Target    | Description                                 |
+|-----------|---------------------------------------------|
+| `test`    | Run Go and Pulumi integration tests          |
+| `lint`    | Format and vet Go code                       |
+| `preview` | Pulumi preview (dry-run)                     |
+| `deploy`  | Pulumi deploy (apply changes)                |
+| `destroy` | Pulumi destroy (tear down infra)             |
+| `clean`   | Remove build/test artifacts                  |
+| `all`     | Run both `test` and `lint`                   |
+
+**Usage examples:**
+
+```sh
+make test      # Run all tests
+make lint      # Lint and format code
+make preview   # See what Pulumi will change
+make deploy    # Deploy infrastructure
+make destroy   # Tear down infrastructure
+make clean     # Remove build/test artifacts
+```
+
+This helps ensure code quality, repeatable deployments, and easy cleanup for all contributors.
+
+---
+
 This summary covers all the code and documentation relevant to explaining the project for README purposes. If you need more detail on any specific part (e.g., the VPC logic, CLI usage, or configuration), you can refer to the corresponding files listed above.Certainly! Here’s a clear explanation of your project, suitable for use in a README file:
 
 ---
