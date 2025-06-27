@@ -75,7 +75,7 @@ func main() {
 func deployVPCStage(ctx *pulumi.Context, config *conf.Config, tags pulumi.StringMap) error {
 	ctx.Log.Info("Deploying VPC stage", nil)
 
-	err := vpc.SetupNetwork(ctx, config)
+	err := vpc.SetupNetwork(ctx, config, tags)
 	if err != nil {
 		return fmt.Errorf("failed to create VPC: %w", err)
 	}
