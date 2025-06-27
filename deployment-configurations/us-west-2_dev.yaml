@@ -1,0 +1,8 @@
+environment: dev
+customer: danieloa
+# region is read from AWS_REGION environment variable
+vpc_cidr: "10.0.10.0/16"
+# subnets are 3 and are known. we dont need definition for them, we need a process to segment them.
+availability_zones: [az1,az2,az3]
+eks_version: "1.32"
+product_domain: danieloa-vpc.example.com

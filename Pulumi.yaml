@@ -1,0 +1,29 @@
+name: danieloa-infrastructure-go
+runtime: go
+description: Simplified danieloa Platform Infrastructure in Go
+
+config:
+  region:
+    type: string
+    description: AWS region to deploy to
+    default: us-east-1
+    
+  environment:
+    type: string
+    description: Environment name (dev, staging, prod)
+    default: dev
+  
+  customer:
+    type: string
+    description: Customer name
+    default: danieloa
+  
+  stage:
+    type: string
+    description: Deployment stage (vpc, core, apps)
+    default: vpc
+
+  vpc_cidr:
+    type: string
+    description: CIDR block for the VPC
+    default: "10.0.0/16"
