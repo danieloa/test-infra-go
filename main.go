@@ -55,7 +55,7 @@ func main() {
 			"Stage":         pulumi.String(stage.String()),
 		}
 
-		ctx.Log.Info(fmt.Sprintf("Deploying %s stage for customer: %s", stage.String(), infraConfig.CustomerName), nil)
+		ctx.Log.Info(fmt.Sprintf("Deploying %s stage for customer: %s", stage.String(), infraConfig.Customer), nil)
 
 		// Execute deployment based on stage
 		switch stage {
@@ -66,7 +66,20 @@ func main() {
 		case stages.StageApps:
 			return deployAppsStage(ctx, infraConfig, tags)
 		default:
-			return fmt.Errorf("unknown stage: %s", stage.String())
+			// Handle all stages
+			err := deployVPCStage(ctx, infraConfig, tags)
+			if err != nil {
+				return fmt.Errorf("failed to deploy VPC stage: %w", err)
+			}
+			err = deployCoreStage(ctx, infraConfig, tags)
+			if err != nil {
+				return fmt.Errorf("failed to deploy Core stage: %w", err)
+			}
+			err = deployAppsStage(ctx, infraConfig, tags)
+			if err != nil {
+				return fmt.Errorf("failed to deploy Apps stage: %w", err)
+			}
+			return nil
 		}
 	})
 }
@@ -88,6 +101,10 @@ func deployCoreStage(ctx *pulumi.Context, config *conf.Config, tags pulumi.Strin
 	ctx.Log.Info("Deploying Core stage", nil)
 
 	//TODO: Implement EKS, RDS, S3 deployment logic
+	eks, err := core.setupCoreInfrastructure(ctx, config, tags)
+	if err != nil {
+		return fmt.Errorf("failed to set up EKS cluster: %w", err)
+	}
 
 	ctx.Log.Info("Core stage deployment completed successfully", nil)
 	return nil
