@@ -12,7 +12,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
 
-func CreateVPC(ctx *pulumi.Context, config *conf.Config, tags pulumi.StringMap) (*ec2.Vpc, error) {
+func createVPC(ctx *pulumi.Context, config *conf.Config, tags pulumi.StringMap) (*ec2.Vpc, error) {
 	// Create VPC with comprehensive configuration
 	vpc, err := ec2.NewVpc(ctx, fmt.Sprintf("%s-vpc", config.Customer), &ec2.VpcArgs{
 		CidrBlock:          pulumi.String(config.VpcCidr),
@@ -26,7 +26,7 @@ func CreateVPC(ctx *pulumi.Context, config *conf.Config, tags pulumi.StringMap) 
 	return vpc, nil
 }
 
-func CreateInternetGateway(ctx *pulumi.Context, config *conf.Config, vpc *ec2.Vpc, tags pulumi.StringMap) (*ec2.InternetGateway, error) {
+func createInternetGateway(ctx *pulumi.Context, config *conf.Config, vpc *ec2.Vpc, tags pulumi.StringMap) (*ec2.InternetGateway, error) {
 	// Create Internet Gateway
 	igw, err := ec2.NewInternetGateway(ctx, fmt.Sprintf("%s-igw", config.Customer), &ec2.InternetGatewayArgs{
 		VpcId: vpc.ID(),
@@ -40,7 +40,7 @@ func CreateInternetGateway(ctx *pulumi.Context, config *conf.Config, vpc *ec2.Vp
 
 // GetNthSubnet splits a parentCIDR into n subnets and returns the y-th subnet as a string.
 // y is 0-based. Returns error if n is not a power of 2 or y is out of range.
-func GetNthSubnet(parentCIDR string, n, y int) (string, error) {
+func getNthSubnet(parentCIDR string, n, y int) (string, error) {
 	_, ipnet, err := net.ParseCIDR(parentCIDR)
 	if err != nil {
 		return "", fmt.Errorf("invalid CIDR: %w", err)
@@ -64,7 +64,7 @@ func GetNthSubnet(parentCIDR string, n, y int) (string, error) {
 	return subnets.String(), nil
 }
 
-func CreateSubnets(ctx *pulumi.Context, config *conf.Config, vpc *ec2.Vpc, tags pulumi.StringMap) (map[string][]*ec2.Subnet, error) {
+func createSubnets(ctx *pulumi.Context, config *conf.Config, vpc *ec2.Vpc, tags pulumi.StringMap) (map[string][]*ec2.Subnet, error) {
 	// Create subnets for each type
 	subnetList := []string{"public", "platform", "tekton", "database"}
 	azList := []string{"use1-az1", "use1-az2", "use1-az3"} // Example AZs, replace with config.AZs if available
@@ -76,7 +76,7 @@ func CreateSubnets(ctx *pulumi.Context, config *conf.Config, vpc *ec2.Vpc, tags 
 
 		for j, az := range azList {
 			// Get the CIDR for the subnet
-			cidr, err := GetNthSubnet(config.VpcCidr, len(subnetList), i*len(azList)+j)
+			cidr, err := getNthSubnet(config.VpcCidr, len(subnetList), i*len(azList)+j)
 
 			if err != nil {
 				return nil, fmt.Errorf("failed to get CIDR for %s subnet in %s: %w", subnetType, az, err)
@@ -102,7 +102,7 @@ func CreateSubnets(ctx *pulumi.Context, config *conf.Config, vpc *ec2.Vpc, tags 
 	return subnets, nil
 }
 
-func CreateNatGateway(ctx *pulumi.Context, config *conf.Config, subnets map[string][]*ec2.Subnet, igw *ec2.InternetGateway, tags pulumi.StringMap) (map[string]*ec2.NatGateway, error) {
+func createNatGateway(ctx *pulumi.Context, config *conf.Config, subnets map[string][]*ec2.Subnet, igw *ec2.InternetGateway, tags pulumi.StringMap) (map[string]*ec2.NatGateway, error) {
 	// Create Elastic IPs and NAT Gateways with proper mapping
 	natGateways := make(map[string]*ec2.NatGateway)
 	if publicSubnets, exists := subnets["public"]; exists && len(publicSubnets) > 0 {
@@ -158,7 +158,7 @@ func CreateNatGateway(ctx *pulumi.Context, config *conf.Config, subnets map[stri
 	return natGateways, nil
 }
 
-func CreateRouteTables(ctx *pulumi.Context, config *conf.Config, vpc *ec2.Vpc, igw *ec2.InternetGateway, subnets map[string][]*ec2.Subnet, natGateways map[string]*ec2.NatGateway, tags pulumi.StringMap) (map[string]*ec2.RouteTable, error) {
+func createRouteTables(ctx *pulumi.Context, config *conf.Config, vpc *ec2.Vpc, igw *ec2.InternetGateway, subnets map[string][]*ec2.Subnet, natGateways map[string]*ec2.NatGateway, tags pulumi.StringMap) (map[string]*ec2.RouteTable, error) {
 	// Create Route Tables and routes
 	routeTables := make(map[string]*ec2.RouteTable)
 
@@ -230,7 +230,7 @@ func CreateRouteTables(ctx *pulumi.Context, config *conf.Config, vpc *ec2.Vpc, i
 	return routeTables, nil
 }
 
-func CreateSecurityGroups(ctx *pulumi.Context, config *conf.Config, vpc *ec2.Vpc, tags pulumi.StringMap) (map[string]*ec2.SecurityGroup, error) {
+func createSecurityGroups(ctx *pulumi.Context, config *conf.Config, vpc *ec2.Vpc, tags pulumi.StringMap) (map[string]*ec2.SecurityGroup, error) {
 	// Create Security Groups
 	securityGroups := make(map[string]*ec2.SecurityGroup)
 
@@ -306,33 +306,33 @@ func CreateSecurityGroups(ctx *pulumi.Context, config *conf.Config, vpc *ec2.Vpc
 
 func SetupNetwork(ctx *pulumi.Context, config *conf.Config, tags pulumi.StringMap) error {
 	// Create VPC
-	vpc, err := CreateVPC(ctx, config, tags)
+	vpc, err := createVPC(ctx, config, tags)
 	if err != nil {
 		return fmt.Errorf("failed to create VPC: %w", err)
 	}
 	// Create Internet Gateway
-	igw, err := CreateInternetGateway(ctx, config, vpc, tags)
+	igw, err := createInternetGateway(ctx, config, vpc, tags)
 	if err != nil {
 		return fmt.Errorf("failed to create Internet Gateway: %w", err)
 	}
 	// Create subnets
-	subnets, err := CreateSubnets(ctx, config, vpc, tags)
+	subnets, err := createSubnets(ctx, config, vpc, tags)
 	if err != nil {
 		return fmt.Errorf("failed to create subnets: %w", err)
 	}
 	// Create NAT Gateways
-	natGateways, err := CreateNatGateway(ctx, config, subnets, igw, tags)
+	natGateways, err := createNatGateway(ctx, config, subnets, igw, tags)
 	if err != nil {
 		return fmt.Errorf("failed to create NAT Gateways: %w", err)
 	}
 	// Create Route Tables
-	_, err = CreateRouteTables(ctx, config, vpc, igw,
+	_, err = createRouteTables(ctx, config, vpc, igw,
 		subnets, natGateways, tags)
 	if err != nil {
 		return fmt.Errorf("failed to create route tables: %w", err)
 	}
 	// Create Security Groups
-	securityGroups, err := CreateSecurityGroups(ctx, config, vpc, tags)
+	securityGroups, err := createSecurityGroups(ctx, config, vpc, tags)
 	if err != nil {
 		return fmt.Errorf("failed to create security groups: %w", err)
 	}

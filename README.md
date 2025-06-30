@@ -116,25 +116,63 @@ product_domain: danieloa-vpc.example.com
 
 A `Makefile` is provided to streamline common developer workflows:
 
+### Build and Installation
 | Target    | Description                                 |
 |-----------|---------------------------------------------|
-| `test`    | Run Go and Pulumi integration tests          |
-| `lint`    | Format and vet Go code                       |
-| `preview` | Pulumi preview (dry-run)                     |
-| `deploy`  | Pulumi deploy (apply changes)                |
-| `destroy` | Pulumi destroy (tear down infra)             |
-| `clean`   | Remove build/test artifacts                  |
-| `all`     | Run both `test` and `lint`                   |
+| `build`   | Build the deploy CLI tool to `bin/deploy`  |
+| `install` | Install the deploy CLI tool to `$GOPATH/bin` |
+
+### Testing and Quality
+| Target    | Description                                 |
+|-----------|---------------------------------------------|
+| `test`    | Run Go and Pulumi integration tests        |
+| `lint`    | Format and vet Go code                     |
+| `all`     | Run `test`, `lint`, and `build`            |
+
+### Infrastructure Management
+| Target         | Description                                 |
+|----------------|---------------------------------------------|
+| `init`         | Initialize S3 backend for Pulumi state     |
+| `deploy-vpc`   | Deploy VPC stage only                      |
+| `deploy-core`  | Deploy Core stage only                     |
+| `deploy-apps`  | Deploy Apps stage only                     |
+| `deploy`       | Deploy all stages in sequence              |
+
+### Preview Changes
+| Target         | Description                                 |
+|----------------|---------------------------------------------|
+| `preview-vpc`  | Preview VPC stage changes (dry-run)        |
+| `preview-core` | Preview Core stage changes (dry-run)       |
+| `preview-apps` | Preview Apps stage changes (dry-run)       |
+
+### Cleanup and Destruction
+| Target         | Description                                 |
+|----------------|---------------------------------------------|
+| `destroy-vpc`  | Destroy VPC stage only                     |
+| `destroy-core` | Destroy Core stage only                    |
+| `destroy-apps` | Destroy Apps stage only                    |
+| `destroy`      | Destroy all stages in reverse order        |
+| `clean`        | Remove build/test artifacts                |
 
 **Usage examples:**
 
 ```sh
-make test      # Run all tests
-make lint      # Lint and format code
-make preview   # See what Pulumi will change
-make deploy    # Deploy infrastructure
-make destroy   # Tear down infrastructure
-make clean     # Remove build/test artifacts
+# Development workflow
+make test           # Run all tests
+make lint           # Lint and format code
+make build          # Build the CLI tool
+
+# Infrastructure deployment
+make init           # Initialize S3 backend (one-time setup)
+make preview-vpc    # Preview VPC changes
+make deploy-vpc     # Deploy VPC stage
+make deploy-core    # Deploy Core stage
+make deploy-apps    # Deploy Apps stage
+make deploy         # Deploy all stages at once
+
+# Cleanup
+make destroy        # Destroy all infrastructure
+make clean          # Remove build artifacts
 ```
 
 This helps ensure code quality, repeatable deployments, and easy cleanup for all contributors.

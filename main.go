@@ -5,6 +5,7 @@ import (
 	"os"
 
 	conf "github.com/danieloa/test-infra-go/config"
+	core "github.com/danieloa/test-infra-go/core"
 	stages "github.com/danieloa/test-infra-go/stages"
 	vpc "github.com/danieloa/test-infra-go/vpc"
 
@@ -99,14 +100,12 @@ func deployVPCStage(ctx *pulumi.Context, config *conf.Config, tags pulumi.String
 // deployCoreStage deploys core services (EKS, RDS, S3)
 func deployCoreStage(ctx *pulumi.Context, config *conf.Config, tags pulumi.StringMap) error {
 	ctx.Log.Info("Deploying Core stage", nil)
-
 	//TODO: Implement EKS, RDS, S3 deployment logic
-	eks, err := core.setupCoreInfrastructure(ctx, config, tags)
+	err := core.SetupCoreInfrastructure(ctx, config, tags)
 	if err != nil {
 		return fmt.Errorf("failed to set up EKS cluster: %w", err)
 	}
 
-	ctx.Log.Info("Core stage deployment completed successfully", nil)
 	return nil
 }
 
