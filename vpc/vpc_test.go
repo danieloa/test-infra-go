@@ -35,3 +35,26 @@ func TestVpcInfra(t *testing.T) {
 		},
 	})
 }
+
+func TestGetNthSubnet(t *testing.T) {
+	tests := []struct {
+		parentCIDR string
+		n, y       int
+		expected   string
+		shouldErr  bool
+	}{
+		{"10.0.0.0/16", 4, 0, "10.0.0.0/18", false},
+		{"10.0.0.0/16", 4, 1, "10.0.64.0/18", false},
+		{"10.0.0.0/16", 3, 0, "", true}, // n not power of 2
+	}
+
+	for _, tt := range tests {
+		result, err := getNthSubnet(tt.parentCIDR, tt.n, tt.y)
+		if tt.shouldErr && err == nil {
+			t.Errorf("Expected error for input %v", tt)
+		}
+		if !tt.shouldErr && result != tt.expected {
+			t.Errorf("Expected %s, got %s", tt.expected, result)
+		}
+	}
+}

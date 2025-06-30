@@ -31,11 +31,27 @@ func LoadConfig(configPath string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("failed to parse config file: %v", err)
 	}
-
+	// Validate required fields
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid config: %w", err)
+	}
 	return &config, nil
 }
 
 // GetCustomerName returns the customer name regardless of config format
 func (c *Config) GetCustomerName() string {
 	return c.Customer
+}
+
+func (c *Config) Validate() error {
+	if c.Customer == "" {
+		return fmt.Errorf("customer field is required")
+	}
+	if c.VpcCidr == "" {
+		return fmt.Errorf("vpc_cidr field is required")
+	}
+	if len(c.Azs) == 0 {
+		return fmt.Errorf("availability_zones must not be empty")
+	}
+	return nil
 }

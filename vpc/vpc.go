@@ -373,8 +373,10 @@ func SetupNetwork(ctx *pulumi.Context, config *conf.Config, tags pulumi.StringMa
 	if securityGroups["database"] != nil {
 		ctx.Export("databaseSecurityGroupId", securityGroups["database"].ID())
 	}
+	if natGateways["platform"] != nil {
+		ctx.Export("platformNatGatewayId", natGateways["platform"].ID())
+	}
 	ctx.Log.Info("VPC setup completed successfully", nil)
-	// Return nil to indicate success
 
 	return nil
 }
