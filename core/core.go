@@ -51,7 +51,7 @@ func getEc2AssumeRoleJSON() ([]byte, error) {
 
 func getSubnetIds(ctx *pulumi.Context, config *conf.Config, subnetType string) (pulumi.StringArrayOutput, error) {
 	if len(config.Azs) == 0 {
-		return nil, fmt.Errorf("no availability zones specified in config")
+		return pulumi.StringArrayOutput{}, fmt.Errorf("no availability zones specified in config")
 	}
 
 	region, _ := ctx.GetConfig("config:region")
@@ -148,6 +148,7 @@ func setupEKSCluster(ctx *pulumi.Context, config *conf.Config, tags pulumi.Strin
 	if err != nil {
 		return nil, err
 	}
+
 	snetIds, err := getSubnetIds(ctx, config, "platformSubnetIds")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get availability zone IDs: %w", err)
