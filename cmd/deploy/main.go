@@ -193,36 +193,42 @@ func deploy(cfg CLIConfig) error {
 
 	fmt.Printf("🌎 Processing region: %s\n", region)
 
-	// Create region-specific stack name
-	stackName := fmt.Sprintf("%s-%s-%s", config.GetCustomerName(), cfg.Stage, region)
-
-	fmt.Printf("🌎 stackName : %s\n", stackName)
-
-	if err := deployToRegion(cfg, stackName, region); err != nil {
-		return fmt.Errorf("deployment failed for region %s: %w", region, err)
+	stacksPerStage := map[string][]string{
+		"vpc":  {"acm", "r53", "vpc"},
+		"core": {"eks", "s3", "rds", "secrets", "kms"},
+		"apps": {"app1", "app2", "app3"},
 	}
 
-	fmt.Printf("✅ Region %s completed successfully!\n\n", region)
+	for _, stack := range stacksPerStage[cfg.Stage] {
+		stackName := fmt.Sprintf("%s-%s-%s", config.GetCustomerName(), cfg.Stage+"-"+stack, region)
+		fmt.Printf("🌎 stackName : %s\n", stackName)
 
-	// Show completion message
-	switch cfg.Action {
-	case "preview", "diff":
-		fmt.Printf("✅ %s completed successfully for all regions!\n", cfg.Action)
-	case "up":
-		fmt.Printf("✅ %s stage deployed successfully to all regions!\n", cfg.Stage)
-		// Show next steps
-		switch cfg.Stage {
-		case "vpc":
-			fmt.Printf("\n🔗 Next: Deploy core stage with: deploy core\n")
-		case "core":
-			fmt.Printf("\n🔗 Next: Deploy apps stage with: deploy apps\n")
-		case "apps":
-			fmt.Printf("\n🎉 All stages deployed! Your infrastructure is ready.\n")
+		if err := deployToRegion(cfg, stackName, region); err != nil {
+			return fmt.Errorf("deployment failed for region %s: %w", region, err)
 		}
-	case "down":
-		fmt.Printf("✅ %s stage destroyed successfully in all regions!\n", cfg.Stage)
-	case "refresh":
-		fmt.Printf("✅ Infrastructure state refreshed successfully in all regions!\n")
+
+		fmt.Printf("✅ Region %s completed successfully!\n\n", region)
+
+		// Show completion message
+		switch cfg.Action {
+		case "preview", "diff":
+			fmt.Printf("✅ %s completed successfully for all regions!\n", cfg.Action)
+		case "up":
+			fmt.Printf("✅ %s stage deployed successfully to all regions!\n", cfg.Stage)
+			// Show next steps
+			switch cfg.Stage {
+			case "vpc":
+				fmt.Printf("\n🔗 Next: Deploy core stage with: deploy core\n")
+			case "core":
+				fmt.Printf("\n🔗 Next: Deploy apps stage with: deploy apps\n")
+			case "apps":
+				fmt.Printf("\n🎉 All stages deployed! Your infrastructure is ready.\n")
+			}
+		case "down":
+			fmt.Printf("✅ %s stage destroyed successfully in all regions!\n", cfg.Stage)
+		case "refresh":
+			fmt.Printf("✅ Infrastructure state refreshed successfully in all regions!\n")
+		}
 	}
 
 	return nil
@@ -238,6 +244,7 @@ func deployToRegion(cfg CLIConfig, stackName string, region string) error {
 	// Set configuration values for this region
 	configs := map[string]string{
 		"stage":      cfg.Stage,
+		"stackName":  stackName,
 		"aws:region": region,
 		"configFile": cfg.ConfigFile,
 	}

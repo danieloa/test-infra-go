@@ -376,6 +376,9 @@ func SetupNetwork(ctx *pulumi.Context, config *conf.Config, tags pulumi.StringMa
 	if natGateways["platform"] != nil {
 		ctx.Export("platformNatGatewayId", natGateways["platform"].ID())
 	}
+	if natGateways["tekton"] != nil {
+		ctx.Export("tektonNatGatewayId", natGateways["tekton"].ID())
+	}
 	ctx.Log.Info("VPC setup completed successfully", nil)
 
 	return nil

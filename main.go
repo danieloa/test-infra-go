@@ -20,9 +20,14 @@ func main() {
 
 		// Get stage from config (required)
 		stageStr := cfg.Get("stage")
-		stage, err := stages.ParseStage(stageStr)
+		stackStr := cfg.Get("stack")
+		if stageStr == "" {
+			return fmt.Errorf("stage is required, please set it in Pulumi config or as an environment variable")
+		}
+
+		stage, stack, err := stages.ParseStage(stageStr, stackStr)
 		if err != nil {
-			return fmt.Errorf("invalid stage '%s': %w", stageStr, err)
+			return fmt.Errorf("invalid stage '%s' for stack '%s': %w", stageStr, stackStr, err)
 		}
 
 		region := cfg.Get("region") // Get AWS region from Pulumi config
@@ -61,22 +66,22 @@ func main() {
 		// Execute deployment based on stage
 		switch stage {
 		case stages.StageVPC:
-			return deployVPCStage(ctx, infraConfig, tags)
+			return deployVPCStage(ctx, infraConfig, stack, tags)
 		case stages.StageCore:
-			return deployCoreStage(ctx, infraConfig, tags)
+			return deployCoreStage(ctx, infraConfig, stack, tags)
 		case stages.StageApps:
-			return deployAppsStage(ctx, infraConfig, tags)
+			return deployAppsStage(ctx, infraConfig, stack, tags)
 		default:
 			// Handle all stages
-			err := deployVPCStage(ctx, infraConfig, tags)
+			err := deployVPCStage(ctx, infraConfig, stack, tags)
 			if err != nil {
 				return fmt.Errorf("failed to deploy VPC stage: %w", err)
 			}
-			err = deployCoreStage(ctx, infraConfig, tags)
+			err = deployCoreStage(ctx, infraConfig, stack, tags)
 			if err != nil {
 				return fmt.Errorf("failed to deploy Core stage: %w", err)
 			}
-			err = deployAppsStage(ctx, infraConfig, tags)
+			err = deployAppsStage(ctx, infraConfig, stack, tags)
 			if err != nil {
 				return fmt.Errorf("failed to deploy Apps stage: %w", err)
 			}
@@ -86,31 +91,54 @@ func main() {
 }
 
 // deployVPCStage deploys VPC infrastructure
-func deployVPCStage(ctx *pulumi.Context, config *conf.Config, tags pulumi.StringMap) error {
+func deployVPCStage(ctx *pulumi.Context, config *conf.Config, stack stages.Stack, tags pulumi.StringMap) error {
 	ctx.Log.Info("Deploying VPC stage", nil)
-
-	err := vpc.SetupNetwork(ctx, config, tags)
-	if err != nil {
-		return fmt.Errorf("failed to create VPC: %w", err)
+	switch stack {
+	case stages.StackVPC:
+		// Deploy VPC infrastructure
+		err := vpc.SetupNetwork(ctx, config, tags)
+		if err != nil {
+			return fmt.Errorf("failed to create VPC: %w", err)
+		}
+		ctx.Log.Info("VPC stage deployment completed successfully", nil)
+	default:
+		return fmt.Errorf("invalid stack '%s' for VPC stage", stack)
 	}
 
 	return nil
 }
 
 // deployCoreStage deploys core services (EKS, RDS, S3)
-func deployCoreStage(ctx *pulumi.Context, config *conf.Config, tags pulumi.StringMap) error {
+func deployCoreStage(ctx *pulumi.Context, config *conf.Config, stack stages.Stack, tags pulumi.StringMap) error {
 	ctx.Log.Info("Deploying Core stage", nil)
-	//TODO: Implement EKS, RDS, S3 deployment logic
-	err := core.SetupCoreInfrastructure(ctx, config, tags)
-	if err != nil {
-		return fmt.Errorf("failed to set up EKS cluster: %w", err)
+
+	switch stack {
+	case stages.StackEKS:
+		// Setup EKS cluster
+		ctx.Log.Info("Setting up EKS cluster", nil)
+
+		err := core.SetupEKSInfrastructure(ctx, config, tags)
+		if err != nil {
+			return fmt.Errorf("failed to set up EKS cluster: %w", err)
+		}
+		ctx.Log.Info("Core stage deployment completed successfully", nil)
+	case stages.StackS3:
+		// Setup S3 buckets
+		ctx.Log.Info("Setting up S3 buckets", nil)
+		err := core.SetupS3Buckets(ctx, config, tags)
+		if err != nil {
+			return fmt.Errorf("failed to set up S3 buckets: %w", err)
+		}
+		ctx.Log.Info("Core stage S3 setup completed successfully", nil)
+	default:
+		return fmt.Errorf("invalid stack '%s' for Core stage", stack)
 	}
 
 	return nil
 }
 
 // deployAppsStage deploys applications and configurations
-func deployAppsStage(ctx *pulumi.Context, config *conf.Config, tags pulumi.StringMap) error {
+func deployAppsStage(ctx *pulumi.Context, config *conf.Config, stack stages.Stack, tags pulumi.StringMap) error {
 	ctx.Log.Info("Deploying Apps stage", nil)
 	// TODO: Implement application deployment logic
 	ctx.Log.Info("Apps stage deployment completed successfully", nil)
