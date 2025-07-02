@@ -4,15 +4,18 @@
 - It is designed for **multi-stage** and **multi-region** deployments, with a focus on modularity, extensibility, and minimal configuration.
 
 ### Key Features (from `docs/Infra_Core_Feature_Requirements.md`)
-- **Multi-Stage Deployment:** Stages are separated into VPC/networking, core services (EKS, RDS, S3), and applications.
-- **Multi-Region Support:** Region is determined by the `AWS_REGION` environment variable; no hardcoding in config files.
-- **Minimal User Configuration:** Environment YAML files are concise (see `deployment-configurations/`).
-- **Automated Tagging:** All resources are tagged for traceability.
-- **Kubernetes & Helm Integration:** Supports EKS clusters and Helm add-ons (Karpenter, AWS Load Balancer Controller, Datadog).
-- **Secrets & State Management:** Uses AWS Secrets Manager and S3 for Pulumi state.
-- **Centralized IAM:** IAM and policies are modularized.
-- **CI/CD Ready:** Scripts and helpers for automated deployment.
-- **Pulumi Native:** Uses stack outputs, config, and dependency management.
+- **Multi-Stage Deployment:** Infrastructure is organized into clear stages (`vpc`, `core`, `apps`), each responsible for a logical layer (networking, core services, applications).
+- **Multi-Region Support:** The project is region-agnostic, using the `AWS_REGION` environment variable to determine the deployment region. CI/CD pipelines can deploy to multiple regions by updating this variable.
+- **Minimal Configuration:** Environment YAML files are concise, containing only essential settings like environment, customer, VPC CIDR, and availability zones.
+- **No Resource Abstraction:** Functions return Pulumi resource objects directly, avoiding unnecessary abstraction while allowing modularization for clarity.
+- **Automated Tagging:** All resources are auto-tagged for traceability, including customer, region, product domain, and stage.
+- **Kubernetes & Helm Integration:** Supports deploying EKS clusters and Helm charts for add-ons and controllers (e.g., Karpenter, AWS Load Balancer Controller, Datadog).
+- **Secrets & State Management:** Uses AWS Secrets Manager for secrets and automates creation of Pulumi state buckets.
+- **Centralized IAM & Policy Management:** IAM roles and policies are managed in dedicated modules for security and auditability.
+- **Testing:** Emphasizes integration testing using Pulumi SDK and AWS APIs, relying on AWS validation for resource parameters.
+- **CI/CD Ready:** Includes scripts and helpers for automated testing and deployment in CI/CD pipelines.
+- **Extensible & Modular:** New resources or stages can be added with minimal changes due to the modular structure.
+- **Pulumi Native Features:** Leverages Pulumi’s stack outputs, configuration, and dependency management for robust deployments.
 
 ---
 
@@ -21,10 +24,15 @@
 - **main.go:** Entry point for Pulumi, loads config, determines stage, and dispatches to the correct deployment logic.
 - **cmd/deploy/main.go:** CLI tool for initializing backends, deploying stages, and managing stacks/regions.
 - **config/config.go:** Loads and parses YAML configuration files.
+- **core/**: Implements the Core stage (EKS, S3, and related logic).
+    - **core.go:** Orchestrates EKS and S3 setup.
+    - **eks.go:** EKS cluster and IAM role helpers.
+    - **s3.go:** S3 bucket creation logic.
+    - **core_test.go:** Integration tests for EKS and S3.
 - **vpc/vpc.go:** Implements all VPC, subnet, NAT gateway, route table, and security group logic.
 - **stages/stages.go:** Defines and parses deployment stages.
 - **deployment-configurations/**: Contains per-region, per-environment YAML config files.
-- **Pulumi.yaml, Pulumi.env-us-east-1.yaml:** Pulumi project and stack configuration.
+- **Pulumi.yaml, Pulumi.env-*.yaml:** Pulumi project and stack configuration.
 
 ---
 
@@ -47,7 +55,7 @@ product_domain: danieloa-vpc.example.com
 
 ### Defined in `stages/stages.go` and orchestrated in `main.go`:
 - **StageVPC:** Networking foundation (VPC, subnets, NAT, security groups).
-- **StageCore:** Core services (EKS, RDS, S3) – placeholder for future logic.
+- **StageCore:** Core services (EKS, RDS, S3).
 - **StageApps:** Applications and configurations – placeholder for future logic.
 
 ---
@@ -64,7 +72,18 @@ product_domain: danieloa-vpc.example.com
 
 ---
 
-## 6. CLI Tool (`cmd/deploy/main.go`)
+## 6. Core Module (core/)
+- **SetupCoreInfrastructure:** Orchestrates creation of EKS clusters and S3 buckets, exporting all critical outputs.
+- **setupEKSCluster:** Creates an EKS cluster with all required IAM roles and policies.
+- **SetupS3Buckets:** Creates general-purpose and FM S3 buckets with lifecycle, versioning, and CORS as needed.
+- **createS3BucketUnified:** Internal helper for S3 bucket creation with flexible options.
+- **Integration Tests:** Validate that EKS clusters and S3 buckets are created and exported as expected.
+
+See core/README.md for more details.
+
+---
+
+## 7. CLI Tool (`cmd/deploy/main.go`)
 
 - **deploy [stage]:** Deploys a specific stage to the current region.
 - **init:** Initializes S3 backend for Pulumi state.
@@ -73,14 +92,14 @@ product_domain: danieloa-vpc.example.com
 
 ---
 
-## 7. Pulumi Integration
+## 8. Pulumi Integration
 
 - **Pulumi.yaml:** Project metadata, config schema.
 - **Pulumi.env-us-east-1.yaml:** Stack-specific config, including region and config file path.
 
 ---
 
-## 8. Modularity and Extensibility
+## 9. Modularity and Extensibility
 
 - Each stage is a function, easy to extend.
 - New resources or stages can be added with minimal changes.
@@ -88,27 +107,36 @@ product_domain: danieloa-vpc.example.com
 
 ---
 
-## 9. Usage Flow
+## 10. Usage Flow
 
 1. **Configure AWS credentials and set `AWS_REGION`.**
 2. **Edit or create a config YAML in `deployment-configurations/`.**
-3. **Initialize backend:** `deploy init`
-4. **Deploy stages in order:** `deploy vpc`, then `deploy core`, then `deploy apps`
-5. **Outputs (VPC ID, subnet IDs, etc.) are available for use in later stages or stacks.**
+3. **Initialize backend:** `make init`
+4. **Deploy stages in order:** `make deploy-vpc`, then `make deploy-core`, then `make deploy-apps`
+5. **Outputs (VPC ID, subnet IDs, EKS cluster IDs, S3 bucket names, etc.) are available for use in later stages or stacks.**
 
 ---
 
-## 10. Example: VPC Stage
+## 11. Example: VPC Stage
 
 - Creates a production-ready, multi-AZ VPC with all required subnets, NATs, route tables, and security groups for EKS and RDS.
 - All resources are tagged and exported for use by the core and apps stages.
 
 ---
 
-## 11. References
+## 12. Example: Core Stage
+
+- Creates production-ready EKS clusters (platform and Tekton) with all required IAM roles and policies.
+- Creates general-purpose and FM S3 buckets with versioning, lifecycle, and CORS as needed.
+- All resources are tagged and exported for use by the apps stage.
+
+---
+
+## 13. References
 
 - See `/docs/Infra_Core_Feature_Requirements.md` for a full list of requirements and design principles.
 - See `/vpc/README.md` for a deep dive into the VPC module.
+- See `/core/README.md` for a deep dive into the Core module.
 
 ---
 
@@ -174,44 +202,5 @@ make deploy         # Deploy all stages at once
 make destroy        # Destroy all infrastructure
 make clean          # Remove build artifacts
 ```
-
-This helps ensure code quality, repeatable deployments, and easy cleanup for all contributors.
-
----
-
-This summary covers all the code and documentation relevant to explaining the project for README purposes. If you need more detail on any specific part (e.g., the VPC logic, CLI usage, or configuration), you can refer to the corresponding files listed above.Certainly! Here’s a clear explanation of your project, suitable for use in a README file:
-
----
-
-## Project Overview
-
-This project is an Infrastructure-as-Code (IaC) solution using Pulumi with Go to provision and manage AWS cloud infrastructure for the danieloa Platform. It is designed for production-ready, multi-stage, and multi-region deployments, with a focus on clarity, modularity, and minimal configuration.
-
-### Key Features
-
-- **Multi-Stage Deployment:** Infrastructure is organized into clear stages (vpc, `core`, `apps`), each responsible for a logical layer (networking, core services, applications).
-- **Multi-Region Support:** The project is region-agnostic, using the `AWS_REGION` environment variable to determine the deployment region. CI/CD pipelines can deploy to multiple regions by updating this variable.
-- **Minimal Configuration:** Environment YAML files are concise (less than 30 lines), containing only essential settings like environment, customer, VPC CIDR, and availability zones.
-- **No Resource Abstraction:** Functions return Pulumi resource objects directly, avoiding unnecessary abstraction while allowing modularization for clarity.
-- **Automated Tagging:** All resources are auto-tagged for traceability, including customer, region, product domain, and stage.
-- **Kubernetes & Helm Integration:** Supports deploying EKS clusters and Helm charts for add-ons and controllers (e.g., Karpenter, AWS Load Balancer Controller, Datadog).
-- **Secrets & State Management:** Uses AWS Secrets Manager for secrets and automates creation of Pulumi state buckets.
-- **Centralized IAM & Policy Management:** IAM roles and policies are managed in dedicated modules for security and auditability.
-- **Testing:** Emphasizes integration testing using Pulumi SDK and AWS APIs, relying on AWS validation for resource parameters.
-- **CI/CD Ready:** Includes scripts and helpers for automated testing and deployment in CI/CD pipelines.
-- **Extensible & Modular:** New resources or stages can be added with minimal changes due to the modular structure.
-- **Pulumi Native Features:** Leverages Pulumi’s stack outputs, configuration, and dependency management for robust deployments.
-
-### Architecture
-
-- **Stage 1 (VPC):** Sets up networking (VPC, subnets, NAT gateways, route tables, security groups) with multi-AZ support and network isolation for different workloads.
-- **Stage 2 (Core):** Deploys core services like EKS, RDS, and S3.
-- **Stage 3 (Apps):** Deploys applications and configurations.
-
-### Usage
-
-- **Configuration:** Define your environment in a YAML file under deployment-configurations.
-- **Deployment:** Use the CLI tool (main.go) to initialize backends and deploy specific stages.
-- **Region Selection:** Set the `AWS_REGION` environment variable to control the deployment region.
 
 ---
