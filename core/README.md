@@ -100,7 +100,7 @@ if err != nil {
 ```
 
 ---
-🛠️ Contributing
+## 🛠️ Contributing
 Follow Go best practices for modularity and error handling.
 Add integration tests for any new resources.
 Keep resource tagging and output exports consistent.
