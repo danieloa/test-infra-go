@@ -33,6 +33,36 @@ func TestCoreInfraIntegration(t *testing.T) {
 			if _, ok := stackInfo.Outputs["tektonClusterEndpoint"]; !ok {
 				t.Errorf("Expected tektonClusterEndpoint output")
 			}
+			// S3 bucket outputs (general purpose)
+			for _, bucket := range []string{"backups", "logs", "general-logs"} {
+				if _, ok := stackInfo.Outputs[bucket+"BucketId"]; !ok {
+					t.Errorf("Expected %sBucketId output", bucket)
+				}
+				if _, ok := stackInfo.Outputs[bucket+"BucketName"]; !ok {
+					t.Errorf("Expected %sBucketName output", bucket)
+				}
+				if _, ok := stackInfo.Outputs[bucket+"BucketArn"]; !ok {
+					t.Errorf("Expected %sBucketArn output", bucket)
+				}
+				if _, ok := stackInfo.Outputs[bucket+"BucketDomainName"]; !ok {
+					t.Errorf("Expected %sBucketDomainName output", bucket)
+				}
+			}
+			// S3 bucket outputs (fm buckets)
+			for _, bucket := range []string{"rox-conf", "rox-state"} {
+				if _, ok := stackInfo.Outputs[bucket+"BucketId"]; !ok {
+					t.Errorf("Expected %sBucketId output", bucket)
+				}
+				if _, ok := stackInfo.Outputs[bucket+"BucketName"]; !ok {
+					t.Errorf("Expected %sBucketName output", bucket)
+				}
+				if _, ok := stackInfo.Outputs[bucket+"BucketArn"]; !ok {
+					t.Errorf("Expected %sBucketArn output", bucket)
+				}
+				if _, ok := stackInfo.Outputs[bucket+"BucketDomainName"]; !ok {
+					t.Errorf("Expected %sBucketDomainName output", bucket)
+				}
+			}
 		},
 	})
 }
