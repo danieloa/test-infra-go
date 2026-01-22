@@ -39,50 +39,66 @@ func createInternetGateway(ctx *pulumi.Context, config *conf.Config, vpc *ec2.Vp
 }
 
 // GetNthSubnet splits a parentCIDR into n subnets and returns the y-th subnet as a string.
-// y is 0-based. Returns error if n is not a power of 2 or y is out of range.
+// y is 0-based. If n is not a power of 2, rounds up to the next power of 2.
 func getNthSubnet(parentCIDR string, n, y int) (string, error) {
 	_, ipnet, err := net.ParseCIDR(parentCIDR)
 	if err != nil {
 		return "", fmt.Errorf("invalid CIDR: %w", err)
 	}
-	if n <= 0 || y < 0 || y >= n {
-		return "", fmt.Errorf("invalid n or y")
+	if n <= 0 || y < 0 {
+		return "", fmt.Errorf("invalid n or y: n must be positive, y must be non-negative")
 	}
+
+	// Round n up to the next power of 2 if it's not already
+	nPowerOf2 := 1
+	bitsNeeded := 0
+	for nPowerOf2 < n {
+		nPowerOf2 <<= 1
+		bitsNeeded++
+	}
+
+	if y >= n {
+		return "", fmt.Errorf("y (%d) must be less than n (%d)", y, n)
+	}
+
 	ones, bits := ipnet.Mask.Size()
-	// n must be a power of 2, and the new prefix must not exceed bits
-	newOnes := ones
-	for pow := 1; pow < n; pow <<= 1 {
-		newOnes++
+	newOnes := ones + bitsNeeded
+
+	if newOnes > bits {
+		return "", fmt.Errorf("cannot subdivide /%d into %d subnets (would require /%d)", ones, nPowerOf2, newOnes)
 	}
-	if 1<<(newOnes-ones) != n || newOnes > bits {
-		return "", fmt.Errorf("n must be a power of 2 and fit in the address space")
-	}
-	subnets, err := cidr.Subnet(ipnet, newOnes-ones, y)
+
+	subnets, err := cidr.Subnet(ipnet, bitsNeeded, y)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to calculate subnet: %w", err)
 	}
 	return subnets.String(), nil
 }
 
 func createSubnets(ctx *pulumi.Context, config *conf.Config, vpc *ec2.Vpc, tags pulumi.StringMap) (map[string][]*ec2.Subnet, error) {
 	// Create subnets for each type
-	subnetList := []string{"public", "platform", "tekton", "database"}
-	azList := []string{"use1-az1", "use1-az2", "use1-az3"} // Example AZs, replace with config.AZs if available
+	subnetTypes := []string{"public", "platform", "tekton", "database"}
+	azList := config.Azs // Use AZs from config
 	subnets := make(map[string][]*ec2.Subnet)
 
-	// Define subnet configurations
-	for i, subnetType := range subnetList {
-		subnet := make([]*ec2.Subnet, 0)
+	// Total number of subnets needed: len(subnetTypes) * len(azList)
+	totalSubnets := len(subnetTypes) * len(azList)
+
+	// Calculate CIDR for each subnet
+	subnetIndex := 0
+	for _, subnetType := range subnetTypes {
+		subnetList := make([]*ec2.Subnet, 0)
 
 		for j, az := range azList {
-			// Get the CIDR for the subnet
-			cidr, err := getNthSubnet(config.VpcCidr, len(subnetList), i*len(azList)+j)
-
+			// Get the CIDR for this specific subnet
+			cidr, err := getNthSubnet(config.VpcCidr, totalSubnets, subnetIndex)
 			if err != nil {
 				return nil, fmt.Errorf("failed to get CIDR for %s subnet in %s: %w", subnetType, az, err)
 			}
 
-			subnetSegment, err := ec2.NewSubnet(ctx, fmt.Sprintf("%s-%s-subnet-%d", config.Customer, subnetType, i), &ec2.SubnetArgs{
+			// Create unique subnet name including AZ index
+			subnetName := fmt.Sprintf("%s-%s-subnet-%d", config.Customer, subnetType, j)
+			subnetSegment, err := ec2.NewSubnet(ctx, subnetName, &ec2.SubnetArgs{
 				VpcId:               vpc.ID(),
 				CidrBlock:           pulumi.String(cidr),
 				AvailabilityZone:    pulumi.String(az),
@@ -91,14 +107,16 @@ func createSubnets(ctx *pulumi.Context, config *conf.Config, vpc *ec2.Vpc, tags 
 			})
 
 			if err != nil {
-				return nil, fmt.Errorf("failed to create %s subnet %d: %w", subnetType, i, err)
+				return nil, fmt.Errorf("failed to create %s subnet %d in %s: %w", subnetType, j, az, err)
 			}
 
-			subnet = append(subnet, subnetSegment)
+			subnetList = append(subnetList, subnetSegment)
+			subnetIndex++
 		}
-		subnets[subnetType] = subnet
+		subnets[subnetType] = subnetList
 	}
 
+	ctx.Log.Info(fmt.Sprintf("Created %d subnets across %d availability zones", totalSubnets, len(azList)), nil)
 	return subnets, nil
 }
 
@@ -248,11 +266,11 @@ func createSecurityGroups(ctx *pulumi.Context, config *conf.Config, vpc *ec2.Vpc
 				CidrBlocks:  pulumi.StringArray{pulumi.String(config.VpcCidr)},
 			},
 			&ec2.SecurityGroupIngressArgs{
-				Description: pulumi.String("HTTPS"),
+				Description: pulumi.String("HTTPS from company IP"),
 				FromPort:    pulumi.Int(443),
 				ToPort:      pulumi.Int(443),
 				Protocol:    pulumi.String("tcp"),
-				CidrBlocks:  pulumi.StringArray{pulumi.String("0.0.0.0/0")},
+				CidrBlocks:  pulumi.StringArray{pulumi.String(config.CompanyIP)},
 			},
 		},
 		Egress: ec2.SecurityGroupEgressArray{

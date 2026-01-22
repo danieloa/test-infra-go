@@ -72,20 +72,7 @@ func main() {
 		case stages.StageApps:
 			return deployAppsStage(ctx, infraConfig, stack, tags)
 		default:
-			// Handle all stages
-			err := deployVPCStage(ctx, infraConfig, stack, tags)
-			if err != nil {
-				return fmt.Errorf("failed to deploy VPC stage: %w", err)
-			}
-			err = deployCoreStage(ctx, infraConfig, stack, tags)
-			if err != nil {
-				return fmt.Errorf("failed to deploy Core stage: %w", err)
-			}
-			err = deployAppsStage(ctx, infraConfig, stack, tags)
-			if err != nil {
-				return fmt.Errorf("failed to deploy Apps stage: %w", err)
-			}
-			return nil
+			return fmt.Errorf("unsupported stage: %s. Valid stages are: vpc, core, apps", stage)
 		}
 	})
 }
@@ -140,7 +127,14 @@ func deployCoreStage(ctx *pulumi.Context, config *conf.Config, stack stages.Stac
 // deployAppsStage deploys applications and configurations
 func deployAppsStage(ctx *pulumi.Context, config *conf.Config, stack stages.Stack, tags pulumi.StringMap) error {
 	ctx.Log.Info("Deploying Apps stage", nil)
-	// TODO: Implement application deployment logic
-	ctx.Log.Info("Apps stage deployment completed successfully", nil)
+
+	// TODO: Implement application deployment logic here
+	// This is where you would deploy your applications, Helm charts, Kubernetes manifests, etc.
+	// Examples:
+	// - Deploy applications using Helm
+	// - Create Kubernetes resources
+	// - Configure application-specific infrastructure
+
+	ctx.Log.Info("Apps stage deployment completed successfully (placeholder - implement your app deployment here)", nil)
 	return nil
 }

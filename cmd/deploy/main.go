@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"strings"
 
 	danieloaConfig "github.com/danieloa/test-infra-go/config"
 
@@ -68,19 +69,21 @@ func loadConfig(filename string) (*danieloaConfig.Config, error) {
 	return &config, nil
 }
 
-func ensureAWSProfile() {
-	os.Setenv("AWS_PROFILE", "danieloa-saas-vpc-install-1")
-}
-
 func checkAWSAuth() error {
-	ensureAWSProfile()
+	// Check if AWS_PROFILE is set
+	profile := os.Getenv("AWS_PROFILE")
+	if profile == "" {
+		return fmt.Errorf("❌ AWS_PROFILE environment variable is not set. Please set it to your AWS profile name")
+	}
+
+	// Verify AWS credentials are valid
 	cmd := exec.Command("aws", "sts", "get-caller-identity")
 	_, err := cmd.Output()
 	if err != nil {
-		fmt.Printf("❌ AWS authentication failed. Please run: aws sso login --profile danieloa-saas-vpc-install-1\n")
+		fmt.Printf("❌ AWS authentication failed. Please run: aws sso login --profile %s\n", profile)
 		return fmt.Errorf("AWS authentication failed: %w", err)
 	}
-	fmt.Printf("✅ AWS authentication successful\n")
+	fmt.Printf("✅ AWS authentication successful (profile: %s)\n", profile)
 	return nil
 }
 
@@ -200,7 +203,9 @@ func deploy(cfg CLIConfig) error {
 	}
 
 	for _, stack := range stacksPerStage[cfg.Stage] {
-		stackName := fmt.Sprintf("%s-%s-%s", config.GetCustomerName(), cfg.Stage+"-"+stack, region)
+		// Stack naming format: customer-stage-stack-region
+		// Example: danieloa-vpc-vpc-us-east-1
+		stackName := fmt.Sprintf("%s-%s-%s-%s", config.GetCustomerName(), cfg.Stage, stack, region)
 		fmt.Printf("🌎 stackName : %s\n", stackName)
 
 		if err := deployToRegion(cfg, stackName, region); err != nil {
@@ -242,9 +247,21 @@ func deployToRegion(cfg CLIConfig, stackName string, region string) error {
 	}
 
 	// Set configuration values for this region
+	// Extract stack identifier from full stack name
+	// stackName format is: customer-stage-stack-region (e.g., danieloa-vpc-vpc-us-east-1)
+	// We need to extract just the stack part (3rd component)
+	stackParts := strings.Split(stackName, "-")
+	stackIdentifier := ""
+	// Stack format: customer-stage-stack-region
+	// For danieloa-vpc-vpc-us-east-1: parts are [danieloa, vpc, vpc, us, east, 1]
+	// We want the 3rd element (index 2)
+	if len(stackParts) >= 3 {
+		stackIdentifier = stackParts[2]
+	}
+
 	configs := map[string]string{
 		"stage":      cfg.Stage,
-		"stackName":  stackName,
+		"stack":      stackIdentifier,
 		"aws:region": region,
 		"configFile": cfg.ConfigFile,
 	}
@@ -260,9 +277,9 @@ func deployToRegion(cfg CLIConfig, stackName string, region string) error {
 	var deployCmd *exec.Cmd
 	switch cfg.Action {
 	case "preview":
-		deployCmd = exec.Command("pulumi", "'preview --diff'")
+		deployCmd = exec.Command("pulumi", "preview", "--diff")
 	case "up":
-		deployCmd = exec.Command("pulumi", "up", "--no")
+		deployCmd = exec.Command("pulumi", "up", "--yes")
 	case "down":
 		deployCmd = exec.Command("pulumi", "destroy", "--yes")
 	case "refresh":

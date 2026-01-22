@@ -25,3 +25,5 @@ go.work.sum
 # Pulumi state and secrets
 .pulumi/secrets.*
 *.bak
+
+.claude/

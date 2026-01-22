@@ -5,19 +5,16 @@ import (
 
 	conf "github.com/danieloa/test-infra-go/config"
 
-	"github.com/pulumi/pulumi-aws/sdk/v6/go/aws/s3"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
 
 var (
-	fmBuckets             = []string{"rox-conf", "rox-state"}
-	generalPurposeBuckets = []string{"backups", "logs", "general-logs"}
+	publicBuckets                = []string{"images", "assets", "public-data"}
+	generalPurposePrivateBuckets = []string{"backups", "logs", "general-logs"}
 )
 
 func SetupEKSInfrastructure(ctx *pulumi.Context, config *conf.Config, tags pulumi.StringMap) error {
-	// Placeholder for core infrastructure setup logic
-	// This could include setting up EKS, RDS, S3, etc.
-	fmt.Println("Setting up core infrastructure...")
+	ctx.Log.Info("Setting up core infrastructure...", nil)
 
 	// Initialize EKS cluster
 	platform, err := setupEKSCluster(ctx, config, "platform-", tags)
@@ -42,12 +39,12 @@ func SetupEKSInfrastructure(ctx *pulumi.Context, config *conf.Config, tags pulum
 func SetupS3Buckets(ctx *pulumi.Context, config *conf.Config, tags pulumi.StringMap) error {
 	productDomain := config.ProductDomain
 
-	// General purpose buckets (no CORS, private)
-	for _, bucketName := range generalPurposeBuckets {
-		fullName := bucketName + productDomain
-		bucket, err := createS3BucketUnified(ctx, fullName, tags, false, pulumi.String(s3.CannedAclPrivate), nil)
+	// Private buckets (with encryption, no CORS, restricted access)
+	for _, bucketName := range generalPurposePrivateBuckets {
+		fullName := bucketName + "-" + productDomain
+		bucket, err := createS3BucketUnified(ctx, fullName, tags, false, false, nil)
 		if err != nil {
-			return fmt.Errorf("failed to create S3 bucket %s: %w", fullName, err)
+			return fmt.Errorf("failed to create private S3 bucket %s: %w", fullName, err)
 		}
 		ctx.Export(fmt.Sprintf("%sBucketId", bucketName), bucket.ID())
 		ctx.Export(fmt.Sprintf("%sBucketName", bucketName), bucket.Bucket)
@@ -55,19 +52,20 @@ func SetupS3Buckets(ctx *pulumi.Context, config *conf.Config, tags pulumi.String
 		ctx.Export(fmt.Sprintf("%sBucketDomainName", bucketName), bucket.BucketDomainName)
 	}
 
-	// FM buckets (with CORS, public-read)
-	for _, fmBucketName := range fmBuckets {
-		fullName := fmBucketName + productDomain
+	// Public buckets (with CORS, public-read) - intentionally public for web content
+	for _, publicBucketName := range publicBuckets {
+		fullName := publicBucketName + "-" + productDomain
 		corsOrigins := []string{"https://" + fullName}
-		bucket, err := createS3BucketUnified(ctx, fullName, tags, true, pulumi.String(s3.CannedAclPublicRead), corsOrigins)
+		bucket, err := createS3BucketUnified(ctx, fullName, tags, true, true, corsOrigins)
 		if err != nil {
-			return fmt.Errorf("failed to create S3 bucket %s: %w", fullName, err)
+			return fmt.Errorf("failed to create public S3 bucket %s: %w", fullName, err)
 		}
-		ctx.Export(fmt.Sprintf("%sBucketId", fmBucketName), bucket.ID())
-		ctx.Export(fmt.Sprintf("%sBucketName", fmBucketName), bucket.Bucket)
-		ctx.Export(fmt.Sprintf("%sBucketArn", fmBucketName), bucket.Arn)
-		ctx.Export(fmt.Sprintf("%sBucketDomainName", fmBucketName), bucket.BucketDomainName)
+		ctx.Export(fmt.Sprintf("%sBucketId", publicBucketName), bucket.ID())
+		ctx.Export(fmt.Sprintf("%sBucketName", publicBucketName), bucket.Bucket)
+		ctx.Export(fmt.Sprintf("%sBucketArn", publicBucketName), bucket.Arn)
+		ctx.Export(fmt.Sprintf("%sBucketDomainName", publicBucketName), bucket.BucketDomainName)
 	}
 
+	ctx.Log.Info(fmt.Sprintf("Created %d private and %d public S3 buckets", len(generalPurposePrivateBuckets), len(publicBuckets)), nil)
 	return nil
 }

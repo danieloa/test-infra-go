@@ -2,7 +2,8 @@ environment: dev
 customer: danieloa
 # region is read from AWS_REGION environment variable
 vpc_cidr: "10.0.10.0/16"
-# subnets are 3 and are known. we dont need definition for them, we need a process to segment them.
-availability_zones: [az1,az2,az3]
-eks_version: "1.32"
+# subnets are automatically calculated from vpc_cidr and divided across availability zones
+availability_zones: ["us-west-2a", "us-west-2b", "us-west-2c"]
 product_domain: danieloa-vpc.example.com
+# Company IP for secure access to EKS HTTPS endpoint (use your office/VPN IP in CIDR format)
+company_ip: "0.0.0.0/0"  # Change this to your company IP for production

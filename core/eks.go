@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	conf "github.com/danieloa/test-infra-go/config"
+	"github.com/danieloa/test-infra-go/stages"
 
 	"github.com/pulumi/pulumi-aws/sdk/v6/go/aws/eks"
 	"github.com/pulumi/pulumi-aws/sdk/v6/go/aws/iam"
@@ -63,7 +65,9 @@ func getSubnetIds(ctx *pulumi.Context, config *conf.Config, subnetType string) (
 		}
 	}
 
-	var stackName = fmt.Sprintf("%s-%s-%s", config.Customer, "vpc", region)
+	// Stack naming format: customer-stage-stack-region
+	// For VPC stage with VPC stack: danieloa-vpc-vpc-us-east-1
+	var stackName = fmt.Sprintf("%s-%s-%s-%s", config.Customer, string(stages.StageVPC), string(stages.StackVPC), region)
 	vpcRef, err := pulumi.NewStackReference(ctx, stackName, nil)
 	if err != nil {
 		return pulumi.StringArrayOutput{}, fmt.Errorf("failed to create stack reference: %w", err)
@@ -85,7 +89,8 @@ func getSubnetIds(ctx *pulumi.Context, config *conf.Config, subnetType string) (
 
 func setupEKSCluster(ctx *pulumi.Context, config *conf.Config, prefix string, tags pulumi.StringMap) (*eks.Cluster, error) {
 
-	fmt.Println("Setting up EKS cluster...")
+	ctx.Log.Info(fmt.Sprintf("Setting up EKS cluster with prefix: %s", prefix), nil)
+
 	tmpJSON0, err := getEc2AssumeRoleJSON()
 	if err != nil {
 		return nil, err
@@ -95,6 +100,7 @@ func setupEKSCluster(ctx *pulumi.Context, config *conf.Config, prefix string, ta
 	node, err := iam.NewRole(ctx, prefix+"node", &iam.RoleArgs{
 		Name:             pulumi.String(prefix + "eks-auto-node"),
 		AssumeRolePolicy: pulumi.String(ec2AssumeRolePolicy),
+		Tags:             tags,
 	})
 	if err != nil {
 		return nil, err
@@ -108,6 +114,7 @@ func setupEKSCluster(ctx *pulumi.Context, config *conf.Config, prefix string, ta
 	cluster, err := iam.NewRole(ctx, prefix+"cluster", &iam.RoleArgs{
 		Name:             pulumi.String(prefix + "cluster"),
 		AssumeRolePolicy: pulumi.String(json1),
+		Tags:             tags,
 	})
 	if err != nil {
 		return nil, err
@@ -198,20 +205,24 @@ func setupEKSCluster(ctx *pulumi.Context, config *conf.Config, prefix string, ta
 	if err != nil {
 		return nil, err
 	}
-	_, err = iam.NewRolePolicyAttachment(ctx, prefix+"node_AmazonEKSWorkerNodeMinimalPolicy", &iam.RolePolicyAttachmentArgs{
-		PolicyArn: pulumi.String("arn:aws:iam::aws:policy/AmazonEKSWorkerNodeMinimalPolicy"),
-		Role:      node.Name,
-	})
-	if err != nil {
-		return nil, err
-	}
-	_, err = iam.NewRolePolicyAttachment(ctx, prefix+"node_AmazonEC2ContainerRegistryPullOnly", &iam.RolePolicyAttachmentArgs{
-		PolicyArn: pulumi.String("arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPullOnly"),
-		Role:      node.Name,
-	})
-	if err != nil {
-		return nil, err
+	// Attach additional node policies for CloudWatch logs and other common operations
+	nodePolicies := []string{
+		"arn:aws:iam::aws:policy/AmazonEKSWorkerNodeMinimalPolicy",
+		"arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPullOnly",
+		"arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy",
 	}
 
+	for _, policyArn := range nodePolicies {
+		policyName := prefix + "node_" + policyArn[strings.LastIndex(policyArn, "/")+1:]
+		_, err = iam.NewRolePolicyAttachment(ctx, policyName, &iam.RolePolicyAttachmentArgs{
+			PolicyArn: pulumi.String(policyArn),
+			Role:      node.Name,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to attach policy %s: %w", policyArn, err)
+		}
+	}
+
+	ctx.Log.Info(fmt.Sprintf("Successfully created EKS cluster: %s", eksName), nil)
 	return eksCluster, nil
 }

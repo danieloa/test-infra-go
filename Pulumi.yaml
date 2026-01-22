@@ -26,4 +26,9 @@ config:
   vpc_cidr:
     type: string
     description: CIDR block for the VPC
-    default: "10.0.0/16"
+    default: "10.0.0.0/16"
+
+  company_ip:
+    type: string
+    description: Company IP address for secure access (CIDR format)
+    default: "0.0.0.0/0"

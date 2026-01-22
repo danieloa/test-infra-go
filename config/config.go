@@ -12,8 +12,8 @@ type Config struct {
 	Customer      string   `yaml:"customer,omitempty"`
 	VpcCidr       string   `yaml:"vpc_cidr,omitempty"`
 	Azs           []string `yaml:"availability_zones,omitempty"`
-	eksVersion    string   `yaml:"eks_version,omitempty"`
 	ProductDomain string   `yaml:"product_domain,omitempty"`
+	CompanyIP     string   `yaml:"company_ip,omitempty"`
 }
 
 func LoadConfig(configPath string) (*Config, error) {
@@ -52,6 +52,9 @@ func (c *Config) Validate() error {
 	}
 	if len(c.Azs) == 0 {
 		return fmt.Errorf("availability_zones must not be empty")
+	}
+	if c.CompanyIP == "" {
+		return fmt.Errorf("company_ip field is required")
 	}
 	return nil
 }
