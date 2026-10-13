@@ -1,11 +1,20 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
 	"strings"
+
+	aws "github.com/aws/aws-sdk-go-v2/aws"
+	awsConfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/aws/smithy-go"
 
 	danieloaConfig "github.com/danieloa/test-infra-go/config"
 
@@ -69,21 +78,33 @@ func loadConfig(filename string) (*danieloaConfig.Config, error) {
 	return &config, nil
 }
 
-func checkAWSAuth() error {
-	// Check if AWS_PROFILE is set
-	profile := os.Getenv("AWS_PROFILE")
-	if profile == "" {
-		return fmt.Errorf("❌ AWS_PROFILE environment variable is not set. Please set it to your AWS profile name")
+func checkAWSAuth(region string) error {
+	ctx := context.Background()
+	var opts []func(*awsConfig.LoadOptions) error
+	if region != "" {
+		opts = append(opts, awsConfig.WithRegion(region))
+	}
+	cfg, err := awsConfig.LoadDefaultConfig(ctx, opts...)
+	if err != nil {
+		return fmt.Errorf("failed to load AWS config: %w", err)
 	}
 
-	// Verify AWS credentials are valid
-	cmd := exec.Command("aws", "sts", "get-caller-identity")
-	_, err := cmd.Output()
+	client := sts.NewFromConfig(cfg)
+	identity, err := client.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
 	if err != nil {
-		fmt.Printf("❌ AWS authentication failed. Please run: aws sso login --profile %s\n", profile)
+		profile := os.Getenv("AWS_PROFILE")
+		if profile != "" {
+			fmt.Printf("❌ AWS authentication failed. Please run: aws sso login --profile %s\n", profile)
+		}
 		return fmt.Errorf("AWS authentication failed: %w", err)
 	}
-	fmt.Printf("✅ AWS authentication successful (profile: %s)\n", profile)
+
+	profileInfo := ""
+	if p := os.Getenv("AWS_PROFILE"); p != "" {
+		profileInfo = fmt.Sprintf(" (profile: %s)", p)
+	}
+	fmt.Printf("✅ AWS authentication successful%s (Account: %s, ARN: %s)\n",
+		profileInfo, aws.ToString(identity.Account), aws.ToString(identity.Arn))
 	return nil
 }
 
@@ -100,12 +121,12 @@ func initBackend(cfg CLIConfig) error {
 
 	fmt.Printf("🚀 Initializing S3 backend for customer: %s in primary region: %s\n", customerName, region)
 
-	if err := checkAWSAuth(); err != nil {
+	if err := checkAWSAuth(region); err != nil {
 		return err
 	}
 
 	// Create single S3 bucket in primary region for all stacks
-	s3Bucket := fmt.Sprintf("danieloa-%s-%s-pulumi-state", config.Environment, config.Customer)
+	s3Bucket := fmt.Sprintf("%s-%s-pulumi-state", config.Customer, config.Environment)
 
 	fmt.Printf("📦 Creating S3 bucket: %s\n", s3Bucket)
 
@@ -127,33 +148,66 @@ func initBackend(cfg CLIConfig) error {
 }
 
 func createS3BucketIfNotExists(bucketName, region string) error {
+	ctx := context.Background()
+
+	// Load AWS SDK config
+	cfg, err := awsConfig.LoadDefaultConfig(ctx, awsConfig.WithRegion(region))
+	if err != nil {
+		return fmt.Errorf("failed to load AWS config: %w", err)
+	}
+
+	// Create S3 client
+	client := s3.NewFromConfig(cfg)
+
 	// Check if bucket exists
-	checkCmd := exec.Command("aws", "s3api", "head-bucket", "--bucket", bucketName, "--region", region)
-	if err := checkCmd.Run(); err == nil {
+	_, err = client.HeadBucket(ctx, &s3.HeadBucketInput{
+		Bucket: aws.String(bucketName),
+	})
+	if err == nil {
 		fmt.Printf("✅ S3 bucket already exists: %s\n", bucketName)
 		return nil
 	}
 
 	fmt.Printf("📦 Creating S3 bucket: %s\n", bucketName)
 
-	var createCmd *exec.Cmd
-	if region == "us-east-1" {
-		createCmd = exec.Command("aws", "s3api", "create-bucket", "--bucket", bucketName, "--region", region)
-	} else {
-		createCmd = exec.Command("aws", "s3api", "create-bucket", "--bucket", bucketName, "--region", region,
-			"--create-bucket-configuration", fmt.Sprintf("LocationConstraint=%s", region))
+	// Create bucket with appropriate configuration
+	createBucketInput := &s3.CreateBucketInput{
+		Bucket: aws.String(bucketName),
 	}
 
-	if err := createCmd.Run(); err != nil {
+	// For regions other than us-east-1, we need to specify LocationConstraint
+	if region != "us-east-1" {
+		createBucketInput.CreateBucketConfiguration = &types.CreateBucketConfiguration{
+			LocationConstraint: types.BucketLocationConstraint(region),
+		}
+	}
+
+	_, err = client.CreateBucket(ctx, createBucketInput)
+	if err != nil {
+		// Check if error is because bucket already exists
+		var apiErr smithy.APIError
+		if errors.As(err, &apiErr) {
+			switch apiErr.ErrorCode() {
+			case "BucketAlreadyExists", "BucketAlreadyOwnedByYou":
+				fmt.Printf("✅ S3 bucket already exists: %s\n", bucketName)
+				return nil
+			}
+		}
 		return fmt.Errorf("failed to create S3 bucket: %w", err)
 	}
 
 	// Enable versioning
-	versionCmd := exec.Command("aws", "s3api", "put-bucket-versioning", "--bucket", bucketName,
-		"--versioning-configuration", "Status=Enabled", "--region", region)
-	if err := versionCmd.Run(); err != nil {
+	_, err = client.PutBucketVersioning(ctx, &s3.PutBucketVersioningInput{
+		Bucket: aws.String(bucketName),
+		VersioningConfiguration: &types.VersioningConfiguration{
+			Status: types.BucketVersioningStatusEnabled,
+		},
+	})
+	if err != nil {
 		return fmt.Errorf("failed to enable versioning: %w", err)
 	}
+
+	fmt.Printf("✅ S3 bucket created successfully: %s\n", bucketName)
 
 	return nil
 }
@@ -183,10 +237,6 @@ func deploy(cfg CLIConfig) error {
 	fmt.Printf("   Action: %s\n", cfg.Action)
 	fmt.Printf("\n")
 
-	if err := checkAWSAuth(); err != nil {
-		return err
-	}
-
 	// Set environment variables
 	os.Setenv("CONFIG_FILE", cfg.ConfigFile)
 	fmt.Printf("Using config file: %s\n", cfg.ConfigFile)
@@ -195,6 +245,10 @@ func deploy(cfg CLIConfig) error {
 	region := os.Getenv("AWS_REGION")
 
 	fmt.Printf("🌎 Processing region: %s\n", region)
+
+	if err := checkAWSAuth(region); err != nil {
+		return err
+	}
 
 	stacksPerStage := map[string][]string{
 		"vpc":  {"acm", "r53", "vpc"},
